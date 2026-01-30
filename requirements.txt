@@ -1,14 +1,11 @@
 streamlit
 pandas
 numpy
-joblib
 shap
 matplotlib
 scikit-learn
 pypdf
-
 langchain
 langchain-community
 langchain-google-genai
-
 faiss-cpu

@@ -2,17 +2,16 @@ import os
 import streamlit as st
 import pandas as pd
 import numpy as np
-import joblib
 import shap
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
-from pypdf import PdfReader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
 
+from pypdf import PdfReader
 from langchain.vectorstores import FAISS
 from langchain_google_genai import (
     GoogleGenerativeAIEmbeddings,
@@ -21,7 +20,7 @@ from langchain_google_genai import (
 from langchain_core.messages import HumanMessage
 
 # =========================================================
-# 🔐 LOAD API KEY FROM STREAMLIT SECRETS (OPTION 1)
+# 🔐 LOAD API KEY FROM STREAMLIT SECRETS
 # =========================================================
 os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 
@@ -29,11 +28,11 @@ os.environ["GOOGLE_API_KEY"] = st.secrets["GOOGLE_API_KEY"]
 # ⚙️ PAGE CONFIG
 # =========================================================
 st.set_page_config(
-    page_title="MediMind Pro",
+    page_title="MediMind – Mental Health Intelligence",
     layout="wide"
 )
 
-st.title("🧠 MediMind Pro – AI Mental Health Platform")
+st.title("🧠 MediMind – Explainable AI Platform for Mental Health Intelligence")
 
 # =========================================================
 # 🔐 AUTHENTICATION
@@ -80,31 +79,36 @@ def load_data():
 df = load_data()
 
 # =========================================================
-# 🤖 TRAIN / LOAD MODEL
+# 🤖 TRAIN MODEL (NO PKL, TRAIN-ONCE)
 # =========================================================
 @st.cache_resource
 def train_model():
     data = df.copy()
-    le = LabelEncoder()
+    label_encoders = {}
 
     for col in data.select_dtypes(include="object").columns:
+        le = LabelEncoder()
         data[col] = le.fit_transform(data[col].astype(str))
+        label_encoders[col] = le
 
     target = data.columns[-1]
     X = data.drop(target, axis=1)
     y = data[target]
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42
+        X, y, test_size=0.2, random_state=42, stratify=y
     )
 
-    model = RandomForestClassifier()
+    model = RandomForestClassifier(
+        n_estimators=300,
+        random_state=42,
+        n_jobs=-1
+    )
     model.fit(X_train, y_train)
 
-    joblib.dump(model, "mental_health_model.pkl")
-    return model, X_test, y_test, X
+    return model, X_test, X
 
-model, X_test, y_test, X_all = train_model()
+model, X_test, X_all = train_model()
 
 # =========================================================
 # 📊 DASHBOARD
@@ -154,25 +158,36 @@ elif menu == "Explainability (SHAP)":
     st.pyplot(fig)
 
 # =========================================================
-# 💬 PDF-BASED AI CHATBOT (RAG)
+# 💬 AI CHATBOT (PDF – SAFE VERSION)
 # =========================================================
 elif menu == "AI Chatbot (PDF)":
     st.subheader("💬 Mental Health Assistant (PDF-Grounded)")
 
+    # ---------- Simple text splitter (PURE PYTHON) ----------
+    def simple_text_splitter(text, chunk_size=1000, overlap=200):
+        chunks = []
+        start = 0
+        text_length = len(text)
+
+        while start < text_length:
+            end = start + chunk_size
+            chunks.append(text[start:end])
+            start = end - overlap
+
+        return chunks
+
+    # ---------- Load PDF & Create Vector Store ----------
     @st.cache_resource
     def load_pdf_vectorstore():
         reader = PdfReader("mental_health_Document.pdf")
-        text = ""
+        full_text = ""
 
         for page in reader.pages:
-            if page.extract_text():
-                text += page.extract_text()
+            page_text = page.extract_text()
+            if page_text:
+                full_text += page_text + "\n"
 
-        splitter = RecursiveCharacterTextSplitter(
-            chunk_size=1000,
-            chunk_overlap=200
-        )
-        chunks = splitter.split_text(text)
+        chunks = simple_text_splitter(full_text)
 
         embeddings = GoogleGenerativeAIEmbeddings(
             model="models/embedding-001"
@@ -187,15 +202,16 @@ elif menu == "AI Chatbot (PDF)":
         temperature=0.2
     )
 
-    query = st.text_input("Ask a mental health question:")
+    query = st.text_input("Ask a mental health question based on the document:")
 
     if query:
         docs = vectorstore.similarity_search(query, k=3)
-        context = "\n\n".join([d.page_content for d in docs])
+        context = "\n\n".join([doc.page_content for doc in docs])
 
         prompt = f"""
         You are a mental health assistant.
         Answer ONLY using the context below.
+        If the answer is not found, say so clearly.
 
         Context:
         {context}
@@ -211,17 +227,18 @@ elif menu == "AI Chatbot (PDF)":
 # 📘 ABOUT
 # =========================================================
 else:
-    st.subheader("📘 About MediMind Pro")
+    st.subheader("📘 About MediMind")
     st.markdown("""
-    **MediMind Pro** is an end-to-end AI mental health platform featuring:
+    **MediMind** is an explainable AI-powered mental health intelligence platform.
 
-    - Machine Learning risk prediction
-    - SHAP explainability
+    **Key Features**
+    - ML-based mental health risk prediction
+    - SHAP explainability for transparency
     - Secure authentication
-    - PDF-grounded AI chatbot (RAG)
-    - Production-ready Streamlit deployment
+    - PDF-grounded AI assistant (RAG)
+    - Streamlit Cloud deployment-ready
 
-    **Tech Stack:**  
-    Python · Streamlit · Scikit-Learn · SHAP · LangChain · FAISS · Gemini
+    **Tech Stack**
+    Python · Streamlit · Scikit-learn · SHAP · FAISS · Gemini
     """)
 
