@@ -12,7 +12,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import RandomForestClassifier
 
 from pypdf import PdfReader
-from langchain.vectorstores import FAISS
+from langchain_community.vectorstores import FAISS
+
 from langchain_google_genai import (
     GoogleGenerativeAIEmbeddings,
     ChatGoogleGenerativeAI
