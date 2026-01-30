@@ -48,11 +48,15 @@ menu = st.sidebar.radio(
 )
 
 # =========================================================
-# 📊 SAFE DATA LOADER (NO FileNotFoundError)
+# 📊 SAFE DATA LOADER (EXCEL + CSV)
 # =========================================================
 @st.cache_data
 def load_data():
     possible_files = [
+        "Mental Health Dataset.xlsx",
+        "mental_health_dataset.xlsx",
+        "mental_health.xlsx",
+        "dataset.xlsx",
         "Mental Health Dataset.csv",
         "mental_health_dataset.csv",
         "mental_health.csv",
@@ -61,9 +65,12 @@ def load_data():
 
     for file in possible_files:
         if os.path.exists(file):
-            return pd.read_csv(file)
+            if file.endswith(".xlsx"):
+                return pd.read_excel(file)
+            else:
+                return pd.read_csv(file)
 
-    st.error("❌ Dataset CSV file not found. Please upload it to the repository.")
+    st.error("❌ Dataset file not found. Upload Excel or CSV to the repository.")
     st.stop()
 
 df = load_data()
@@ -74,19 +81,21 @@ df = load_data()
 @st.cache_resource
 def train_model():
     data = df.copy()
-    label_encoders = {}
 
+    # Encode categorical columns
     for col in data.select_dtypes(include="object").columns:
         le = LabelEncoder()
         data[col] = le.fit_transform(data[col].astype(str))
-        label_encoders[col] = le
 
     target = data.columns[-1]
     X = data.drop(target, axis=1)
     y = data[target]
 
     X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.2, random_state=42, stratify=y
+        X, y,
+        test_size=0.2,
+        random_state=42,
+        stratify=y
     )
 
     model = RandomForestClassifier(
@@ -148,36 +157,38 @@ elif menu == "Explainability (SHAP)":
     st.pyplot(fig)
 
 # =========================================================
-# 💬 AI CHATBOT (PDF – SAFE, NO LANGCHAIN SPLITTER)
+# 💬 AI CHATBOT (PDF – SAFE VERSION)
 # =========================================================
 elif menu == "AI Chatbot (PDF)":
     st.subheader("💬 Mental Health Assistant (PDF-Grounded)")
 
+    # ---------- Simple text splitter ----------
     def simple_text_splitter(text, chunk_size=1000, overlap=200):
         chunks = []
         start = 0
-        text_length = len(text)
+        length = len(text)
 
-        while start < text_length:
+        while start < length:
             end = start + chunk_size
             chunks.append(text[start:end])
             start = end - overlap
 
         return chunks
 
+    # ---------- Load PDF & Vector Store ----------
     @st.cache_resource
     def load_pdf_vectorstore():
         if not os.path.exists("mental_health_Document.pdf"):
-            st.error("❌ PDF file not found. Please upload it to the repository.")
+            st.error("❌ PDF file not found. Upload it to the repository.")
             st.stop()
 
         reader = PdfReader("mental_health_Document.pdf")
         full_text = ""
 
         for page in reader.pages:
-            page_text = page.extract_text()
-            if page_text:
-                full_text += page_text + "\n"
+            text = page.extract_text()
+            if text:
+                full_text += text + "\n"
 
         chunks = simple_text_splitter(full_text)
 
@@ -203,7 +214,7 @@ elif menu == "AI Chatbot (PDF)":
         prompt = f"""
         You are a mental health assistant.
         Answer ONLY using the context below.
-        If the answer is not found, say so clearly.
+        If the answer is not present, say so clearly.
 
         Context:
         {context}
@@ -227,6 +238,7 @@ else:
     - ML-based mental health risk prediction
     - SHAP explainability for transparency
     - PDF-grounded AI assistant (RAG)
+    - Excel / CSV dataset support
     - Streamlit Cloud–ready deployment
 
     **Tech Stack**
