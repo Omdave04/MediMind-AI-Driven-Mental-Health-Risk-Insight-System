@@ -1,7 +1,6 @@
 import os
 import streamlit as st
 import pandas as pd
-import numpy as np
 import shap
 import matplotlib
 matplotlib.use("Agg")
@@ -13,7 +12,6 @@ from sklearn.ensemble import RandomForestClassifier
 
 from pypdf import PdfReader
 from langchain_community.vectorstores import FAISS
-
 from langchain_google_genai import (
     GoogleGenerativeAIEmbeddings,
     ChatGoogleGenerativeAI
@@ -36,27 +34,6 @@ st.set_page_config(
 st.title("🧠 MediMind – Explainable AI Platform for Mental Health Intelligence")
 
 # =========================================================
-# 🔐 AUTHENTICATION
-# =========================================================
-if "logged_in" not in st.session_state:
-    st.session_state.logged_in = False
-
-if not st.session_state.logged_in:
-    st.subheader("🔐 Login")
-
-    username = st.text_input("Username")
-    password = st.text_input("Password", type="password")
-
-    if st.button("Login"):
-        if username == "admin" and password == "admin123":
-            st.session_state.logged_in = True
-            st.success("Login successful")
-        else:
-            st.error("Invalid credentials")
-
-    st.stop()
-
-# =========================================================
 # 📌 SIDEBAR
 # =========================================================
 menu = st.sidebar.radio(
@@ -71,16 +48,28 @@ menu = st.sidebar.radio(
 )
 
 # =========================================================
-# 📊 LOAD DATA
+# 📊 SAFE DATA LOADER (NO FileNotFoundError)
 # =========================================================
 @st.cache_data
 def load_data():
-    return pd.read_csv("Mental Health Dataset.csv")
+    possible_files = [
+        "Mental Health Dataset.csv",
+        "mental_health_dataset.csv",
+        "mental_health.csv",
+        "dataset.csv"
+    ]
+
+    for file in possible_files:
+        if os.path.exists(file):
+            return pd.read_csv(file)
+
+    st.error("❌ Dataset CSV file not found. Please upload it to the repository.")
+    st.stop()
 
 df = load_data()
 
 # =========================================================
-# 🤖 TRAIN MODEL (NO PKL, TRAIN-ONCE)
+# 🤖 TRAIN MODEL (NO PKL, TRAIN ONCE)
 # =========================================================
 @st.cache_resource
 def train_model():
@@ -159,12 +148,11 @@ elif menu == "Explainability (SHAP)":
     st.pyplot(fig)
 
 # =========================================================
-# 💬 AI CHATBOT (PDF – SAFE VERSION)
+# 💬 AI CHATBOT (PDF – SAFE, NO LANGCHAIN SPLITTER)
 # =========================================================
 elif menu == "AI Chatbot (PDF)":
     st.subheader("💬 Mental Health Assistant (PDF-Grounded)")
 
-    # ---------- Simple text splitter (PURE PYTHON) ----------
     def simple_text_splitter(text, chunk_size=1000, overlap=200):
         chunks = []
         start = 0
@@ -177,9 +165,12 @@ elif menu == "AI Chatbot (PDF)":
 
         return chunks
 
-    # ---------- Load PDF & Create Vector Store ----------
     @st.cache_resource
     def load_pdf_vectorstore():
+        if not os.path.exists("mental_health_Document.pdf"):
+            st.error("❌ PDF file not found. Please upload it to the repository.")
+            st.stop()
+
         reader = PdfReader("mental_health_Document.pdf")
         full_text = ""
 
@@ -232,14 +223,12 @@ else:
     st.markdown("""
     **MediMind** is an explainable AI-powered mental health intelligence platform.
 
-    **Key Features**
+    **Features**
     - ML-based mental health risk prediction
     - SHAP explainability for transparency
-    - Secure authentication
     - PDF-grounded AI assistant (RAG)
-    - Streamlit Cloud deployment-ready
+    - Streamlit Cloud–ready deployment
 
     **Tech Stack**
     Python · Streamlit · Scikit-learn · SHAP · FAISS · Gemini
     """)
-
